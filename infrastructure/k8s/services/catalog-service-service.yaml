@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service
+  namespace: cinema
+  labels:
+    app: catalog-service
+    component: backend
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+spec:
+  type: ClusterIP
+  selector:
+    app: catalog-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  sessionAffinity: None
+
+---
+# Headless service for StatefulSet scenarios (if needed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service-headless
+  namespace: cinema
+  labels:
+    app: catalog-service
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: catalog-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,495 @@
+version: '3.8'
+
+# Production environment configuration
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+#
+# Key differences from dev:
+# - Use pre-built images from registry
+# - No source code volume mounts
+# - External managed databases (not included here)
+# - Secrets management via Docker secrets
+# - Resource limits
+# - Health checks with restart policies
+
+services:
+  # ============================================
+  # Microservices
+  # ============================================
+
+  auth-service:
+    image: ${DOCKER_REGISTRY}/cinema-auth-service:${VERSION:-latest}
+    container_name: cinema-auth-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    secrets:
+      - db_password
+      - jwt_secret
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  user-service:
+    image: ${DOCKER_REGISTRY}/cinema-user-service:${VERSION:-latest}
+    container_name: cinema-user-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    secrets:
+      - db_password
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  catalog-service:
+    image: ${DOCKER_REGISTRY}/cinema-catalog-service:${VERSION:-latest}
+    container_name: cinema-catalog-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    secrets:
+      - db_password
+      - minio_secret_key
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  search-service:
+    image: ${DOCKER_REGISTRY}/cinema-search-service:${VERSION:-latest}
+    container_name: cinema-search-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  streaming-service:
+    image: ${DOCKER_REGISTRY}/cinema-streaming-service:${VERSION:-latest}
+    container_name: cinema-streaming-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    secrets:
+      - db_password
+      - minio_secret_key
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  analytics-service:
+    image: ${DOCKER_REGISTRY}/cinema-analytics-service:${VERSION:-latest}
+    container_name: cinema-analytics-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    secrets:
+      - clickhouse_password
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  payment-service:
+    image: ${DOCKER_REGISTRY}/cinema-payment-service:${VERSION:-latest}
+    container_name: cinema-payment-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    secrets:
+      - db_password
+      - yoomoney_secret_key
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  notification-service:
+    image: ${DOCKER_REGISTRY}/cinema-notification-service:${VERSION:-latest}
+    container_name: cinema-notification-service
+    env_file:
+      - .env.prod
+    environment:
+      ENVIRONMENT: production
+    secrets:
+      - sendgrid_api_key
+      - fcm_credentials
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - cinema-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # API Gateway
+  # ============================================
+
+  kong:
+    image: kong:3.5-alpine
+    container_name: cinema-kong
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 127.0.0.1:8001
+      KONG_LOG_LEVEL: warn
+      KONG_NGINX_WORKER_PROCESSES: 4
+    volumes:
+      - ../../api-gateway/kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cinema-backend
+      - cinema-gateway
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: cinema-nginx
+    volumes:
+      - ../../api-gateway/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../api-gateway/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - kong
+    networks:
+      - cinema-gateway
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # Monitoring (Production subset)
+  # ============================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cinema-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - cinema-monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cinema-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_SERVER_ROOT_URL: https://monitoring.cinema.example.com
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    depends_on:
+      - prometheus
+    networks:
+      - cinema-monitoring
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================
+# Docker Secrets
+# ============================================
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  minio_secret_key:
+    file: ./secrets/minio_secret_key.txt
+  clickhouse_password:
+    file: ./secrets/clickhouse_password.txt
+  yoomoney_secret_key:
+    file: ./secrets/yoomoney_secret_key.txt
+  sendgrid_api_key:
+    file: ./secrets/sendgrid_api_key.txt
+  fcm_credentials:
+    file: ./secrets/fcm_credentials.json
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  cinema-backend:
+    driver: overlay
+    attachable: true
+  cinema-gateway:
+    driver: overlay
+    attachable: true
+  cinema-monitoring:
+    driver: overlay
+    attachable: true
+
+# ============================================
+# Notes:
+# ============================================
+#
+# 1. External dependencies (managed separately):
+#    - PostgreSQL (managed RDS/CloudSQL)
+#    - Redis (managed ElastiCache/MemoryStore)
+#    - ClickHouse (managed cluster)
+#    - Elasticsearch (managed Elastic Cloud)
+#    - Kafka (managed Confluent Cloud/MSK)
+#    - MinIO/S3 (managed object storage)
+#
+# 2. Secrets management:
+#    - Create secrets/ directory with secret files
+#    - Or use external secret management (Vault, AWS Secrets Manager)
+#
+# 3. Service discovery:
+#    - In production, use service mesh (Istio, Linkerd)
+#    - Or external service discovery (Consul, etcd)
+#
+# 4. Load balancing:
+#    - Use external load balancer (AWS ALB, GCP LB)
+#    - Or run multiple nginx replicas with upstream LB
+#
+# 5. Deployment:
+#    - Consider using Kubernetes for production
+#    - Or Docker Swarm for simpler orchestration

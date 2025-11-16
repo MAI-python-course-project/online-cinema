@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catalog-service-config
+  namespace: cinema
+  labels:
+    app: catalog-service
+data:
+  # Application settings
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "info"
+  WORKERS: "4"
+
+  # Elasticsearch
+  elasticsearch-url: "http://elasticsearch:9200"
+  elasticsearch-index: "movies"
+
+  # MinIO/S3
+  minio-endpoint: "minio:9000"
+  minio-bucket: "cinema-videos"
+  minio-use-ssl: "false"
+
+  # Kafka
+  kafka-bootstrap-servers: "kafka-0.kafka-headless:9092,kafka-1.kafka-headless:9092,kafka-2.kafka-headless:9092"
+  kafka-topic-movies: "movies.events"
+  kafka-consumer-group: "catalog-service"
+
+  # Service URLs
+  auth-service-url: "http://auth-service:8000"
+  user-service-url: "http://user-service:8000"
+
+  # Cache settings
+  cache-ttl: "3600"
+  cache-max-size: "1000"
+
+  # Feature flags
+  enable-recommendations: "true"
+  enable-analytics: "true"
+
+  # Monitoring
+  jaeger-agent-host: "jaeger-agent"
+  jaeger-agent-port: "6831"
+  prometheus-port: "9090"
+
+---
+# Common ConfigMap for all services
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: common-config
+  namespace: cinema
+data:
+  # Timezone
+  TZ: "UTC"
+
+  # Python settings
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+  # Uvicorn settings
+  UVICORN_HOST: "0.0.0.0"
+  UVICORN_PORT: "8000"
+  UVICORN_LOG_LEVEL: "info"

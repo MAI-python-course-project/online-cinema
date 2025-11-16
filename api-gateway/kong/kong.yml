@@ -1,0 +1,440 @@
+# Kong Declarative Configuration
+# API Gateway for Online Cinema Platform
+# DB-less mode configuration
+
+_format_version: "3.0"
+
+# ============================================
+# Services & Routes
+# ============================================
+
+services:
+  # Auth Service
+  - name: auth-service
+    url: http://auth-service:8000
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+
+    routes:
+      - name: auth-routes
+        paths:
+          - /api/v1/auth
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+
+    plugins:
+      # Rate limiting for auth endpoints (stricter)
+      - name: rate-limiting
+        config:
+          minute: 20
+          hour: 200
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+
+      # Request/Response logging
+      - name: http-log
+        config:
+          http_endpoint: http://logging-service:8080/logs
+          method: POST
+          timeout: 10000
+          keepalive: 60000
+          content_type: application/json
+
+  # User Service
+  - name: user-service
+    url: http://user-service:8000
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+
+    routes:
+      - name: user-routes
+        paths:
+          - /api/v1/users
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+
+    plugins:
+      # JWT Authentication
+      - name: jwt
+        config:
+          uri_param_names:
+            - jwt
+          cookie_names:
+            - jwt
+          claims_to_verify:
+            - exp
+          key_claim_name: iss
+          secret_is_base64: false
+          anonymous: null
+          run_on_preflight: true
+
+      # Rate limiting
+      - name: rate-limiting
+        config:
+          minute: 100
+          hour: 1000
+          policy: local
+          fault_tolerant: true
+
+  # Catalog Service
+  - name: catalog-service
+    url: http://catalog-service:8000
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+
+    routes:
+      - name: catalog-routes
+        paths:
+          - /api/v1/catalog
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+
+    plugins:
+      # Response caching for catalog (GET requests)
+      - name: proxy-cache
+        config:
+          request_method:
+            - GET
+            - HEAD
+          response_code:
+            - 200
+            - 301
+            - 404
+          content_type:
+            - application/json
+          cache_ttl: 300
+          strategy: memory
+
+      # Rate limiting
+      - name: rate-limiting
+        config:
+          minute: 200
+          hour: 5000
+          policy: local
+          fault_tolerant: true
+
+  # Search Service
+  - name: search-service
+    url: http://search-service:8000
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+
+    routes:
+      - name: search-routes
+        paths:
+          - /api/v1/search
+        strip_path: false
+        methods:
+          - GET
+          - POST
+
+    plugins:
+      # Rate limiting (higher for search)
+      - name: rate-limiting
+        config:
+          minute: 300
+          hour: 10000
+          policy: local
+          fault_tolerant: true
+
+      # Response caching
+      - name: proxy-cache
+        config:
+          request_method:
+            - GET
+          response_code:
+            - 200
+          content_type:
+            - application/json
+          cache_ttl: 60
+          strategy: memory
+
+  # Streaming Service
+  - name: streaming-service
+    url: http://streaming-service:8000
+    protocol: http
+    connect_timeout: 120000
+    write_timeout: 300000
+    read_timeout: 300000
+    retries: 5
+
+    routes:
+      - name: streaming-routes
+        paths:
+          - /api/v1/stream
+        strip_path: false
+        methods:
+          - GET
+          - HEAD
+          - OPTIONS
+
+    plugins:
+      # JWT Authentication (required for streaming)
+      - name: jwt
+        config:
+          uri_param_names:
+            - jwt
+            - token
+          cookie_names:
+            - jwt
+            - auth_token
+          claims_to_verify:
+            - exp
+          key_claim_name: iss
+
+      # Rate limiting (generous for streaming)
+      - name: rate-limiting
+        config:
+          minute: 500
+          hour: 20000
+          policy: local
+          fault_tolerant: true
+
+      # CORS for video players
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - HEAD
+            - OPTIONS
+          headers:
+            - Accept
+            - Authorization
+            - Content-Type
+            - Range
+          exposed_headers:
+            - X-Auth-Token
+            - Content-Range
+            - Accept-Ranges
+          credentials: true
+          max_age: 3600
+
+  # Analytics Service
+  - name: analytics-service
+    url: http://analytics-service:8000
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+
+    routes:
+      - name: analytics-routes
+        paths:
+          - /api/v1/analytics
+        strip_path: false
+        methods:
+          - GET
+          - POST
+
+    plugins:
+      # Rate limiting
+      - name: rate-limiting
+        config:
+          minute: 150
+          hour: 3000
+          policy: local
+          fault_tolerant: true
+
+  # Payment Service
+  - name: payment-service
+    url: http://payment-service:8000
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 90000
+    read_timeout: 90000
+
+    routes:
+      - name: payment-routes
+        paths:
+          - /api/v1/payments
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+
+    plugins:
+      # JWT Authentication (required)
+      - name: jwt
+        config:
+          uri_param_names:
+            - jwt
+          cookie_names:
+            - jwt
+          claims_to_verify:
+            - exp
+          key_claim_name: iss
+
+      # Rate limiting (strict for payments)
+      - name: rate-limiting
+        config:
+          minute: 30
+          hour: 500
+          policy: local
+          fault_tolerant: true
+
+      # Request size limiting
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 128
+          size_unit: kilobytes
+
+  # Notification Service
+  - name: notification-service
+    url: http://notification-service:8000
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+
+    routes:
+      - name: notification-routes
+        paths:
+          - /api/v1/notifications
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+
+    plugins:
+      # JWT Authentication
+      - name: jwt
+        config:
+          uri_param_names:
+            - jwt
+          cookie_names:
+            - jwt
+          claims_to_verify:
+            - exp
+          key_claim_name: iss
+
+      # Rate limiting
+      - name: rate-limiting
+        config:
+          minute: 100
+          hour: 2000
+          policy: local
+          fault_tolerant: true
+
+# ============================================
+# Global Plugins
+# ============================================
+
+plugins:
+  # Request ID
+  - name: correlation-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+      echo_downstream: true
+
+  # Request Transformer (add common headers)
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - X-Gateway:Kong
+          - X-Gateway-Version:3.0
+
+  # Response Transformer (add security headers)
+  - name: response-transformer
+    config:
+      add:
+        headers:
+          - X-Content-Type-Options:nosniff
+          - X-Frame-Options:SAMEORIGIN
+          - X-XSS-Protection:1; mode=block
+
+  # Prometheus metrics
+  - name: prometheus
+    config:
+      per_consumer: false
+
+  # Request termination for maintenance mode (disabled by default)
+  # - name: request-termination
+  #   config:
+  #     status_code: 503
+  #     message: Service under maintenance
+  #   enabled: false
+
+# ============================================
+# Consumers (JWT Auth)
+# ============================================
+
+consumers:
+  # Example consumer for JWT authentication
+  - username: cinema-app
+    custom_id: cinema-app-id
+
+    jwt_secrets:
+      - key: cinema-issuer
+        algorithm: HS256
+        secret: your-super-secret-jwt-key-change-in-production
+
+  # Admin consumer
+  - username: admin
+    custom_id: admin-id
+
+    jwt_secrets:
+      - key: admin-issuer
+        algorithm: HS256
+        secret: admin-jwt-secret-key-change-in-production
+
+# ============================================
+# Upstreams (Load Balancing)
+# ============================================
+
+# Example: If you have multiple instances of a service
+# upstreams:
+#   - name: catalog-upstream
+#     algorithm: round-robin
+#     hash_on: none
+#     hash_fallback: none
+#     healthchecks:
+#       active:
+#         healthy:
+#           interval: 5
+#           successes: 2
+#         unhealthy:
+#           interval: 5
+#           tcp_failures: 2
+#           http_failures: 3
+#       passive:
+#         healthy:
+#           successes: 2
+#         unhealthy:
+#           tcp_failures: 2
+#           http_failures: 3
+#     targets:
+#       - target: catalog-service-1:8000
+#         weight: 100
+#       - target: catalog-service-2:8000
+#         weight: 100

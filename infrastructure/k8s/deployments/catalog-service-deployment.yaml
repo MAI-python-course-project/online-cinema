@@ -1,0 +1,282 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-service
+  namespace: cinema
+  labels:
+    app: catalog-service
+    component: backend
+    tier: service
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: catalog-service
+  template:
+    metadata:
+      labels:
+        app: catalog-service
+        component: backend
+        tier: service
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: catalog-service
+
+      # Security context for pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Init containers
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+
+        - name: wait-for-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z redis 6379; do
+                echo "Waiting for Redis..."
+                sleep 2
+              done
+              echo "Redis is ready!"
+
+        - name: run-migrations
+          image: ghcr.io/cinema/catalog-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-service-secrets
+                  key: database-url
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+      containers:
+        - name: catalog-service
+          image: ghcr.io/cinema/catalog-service:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          env:
+            # Environment
+            - name: ENVIRONMENT
+              value: "production"
+
+            # Database
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-service-secrets
+                  key: database-url
+
+            # Redis
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-service-secrets
+                  key: redis-url
+
+            # Elasticsearch
+            - name: ELASTICSEARCH_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: catalog-service-config
+                  key: elasticsearch-url
+
+            # MinIO/S3
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: catalog-service-config
+                  key: minio-endpoint
+
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-service-secrets
+                  key: minio-access-key
+
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-service-secrets
+                  key: minio-secret-key
+
+            # Kafka
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: catalog-service-config
+                  key: kafka-bootstrap-servers
+
+            # Observability
+            - name: JAEGER_AGENT_HOST
+              value: "jaeger-agent"
+
+            - name: JAEGER_AGENT_PORT
+              value: "6831"
+
+            # Pod info
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+          # Resource limits and requests
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+
+          # Liveness probe - check if container is alive
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+
+          # Readiness probe - check if container is ready to serve traffic
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+
+          # Startup probe - for slow starting containers
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 30
+
+          # Security context for container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+
+          # Volume mounts
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/.cache
+
+      # Volumes
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+
+      # Pod disruption budget settings
+      # Defined in separate PodDisruptionBudget resource
+
+      # Topology spread constraints
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: catalog-service
+
+      # Affinity rules
+      affinity:
+        # Pod anti-affinity - don't schedule on same node
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - catalog-service
+                topologyKey: kubernetes.io/hostname
+
+      # Termination grace period
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: catalog-service-pdb
+  namespace: cinema
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: catalog-service

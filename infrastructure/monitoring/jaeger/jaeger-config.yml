@@ -1,0 +1,41 @@
+# Jaeger Configuration
+# Distributed tracing for Cinema Platform
+
+# Sampling configuration
+sampling:
+  default_strategy:
+    type: probabilistic
+    param: 0.1  # Sample 10% of traces
+
+# Storage configuration
+storage:
+  type: elasticsearch
+  options:
+    es:
+      server-urls: http://elasticsearch:9200
+      index-prefix: jaeger
+      username: elastic
+      password: changeme
+
+# Agent configuration
+agent:
+  strategies:
+    per-operation:
+      default:
+        type: probabilistic
+        param: 0.1
+
+# Collector configuration
+collector:
+  zipkin:
+    http-port: 9411
+  otlp:
+    grpc:
+      endpoint: 0.0.0.0:4317
+    http:
+      endpoint: 0.0.0.0:4318
+
+# Query configuration
+query:
+  base-path: /jaeger
+  ui-config: /etc/jaeger/ui-config.json

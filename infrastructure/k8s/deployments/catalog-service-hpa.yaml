@@ -1,0 +1,109 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: catalog-service-hpa
+  namespace: cinema
+  labels:
+    app: catalog-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: catalog-service
+
+  # Min/Max replicas
+  minReplicas: 3
+  maxReplicas: 10
+
+  # Scaling behavior
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min
+
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+      selectPolicy: Max
+
+  # Metrics for autoscaling
+  metrics:
+    # CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # Memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+    # Custom metrics (if metrics server supports)
+    # Request rate
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"
+
+    # Response time
+    - type: Pods
+      pods:
+        metric:
+          name: http_request_duration_seconds
+        target:
+          type: AverageValue
+          averageValue: "500m"
+
+---
+# Vertical Pod Autoscaler (optional)
+# Requires VPA controller to be installed
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: catalog-service-vpa
+  namespace: cinema
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: catalog-service
+
+  # Update mode: Off, Initial, Recreate, Auto
+  updatePolicy:
+    updateMode: "Auto"
+
+  # Resource policy
+  resourcePolicy:
+    containerPolicies:
+      - containerName: catalog-service
+        minAllowed:
+          cpu: 100m
+          memory: 256Mi
+        maxAllowed:
+          cpu: 2000m
+          memory: 2Gi
+        controlledResources:
+          - cpu
+          - memory

@@ -1,0 +1,54 @@
+# Prometheus Configuration
+# Metrics collection for API Gateway
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'cinema-api-gateway'
+    environment: 'production'
+
+# Alertmanager configuration
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+# rule_files:
+#   - "alerts/*.yml"
+
+scrape_configs:
+  # Kong metrics
+  - job_name: 'kong'
+    static_configs:
+      - targets: ['kong:8001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # NGINX metrics (requires nginx-prometheus-exporter)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+    scrape_interval: 10s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Backend services (if they expose metrics)
+  - job_name: 'backend-services'
+    static_configs:
+      - targets:
+        - 'auth-service:8000'
+        - 'user-service:8000'
+        - 'catalog-service:8000'
+        - 'search-service:8000'
+        - 'streaming-service:8000'
+        - 'analytics-service:8000'
+        - 'payment-service:8000'
+        - 'notification-service:8000'
+    metrics_path: '/metrics'
+    scrape_interval: 30s

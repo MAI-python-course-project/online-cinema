@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # Kong API Gateway (DB-less mode)
+  # ============================================
+  kong:
+    image: kong:3.5-alpine
+    container_name: api-gateway-kong
+    environment:
+      # DB-less mode
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/declarative/kong.yml
+
+      # Proxy settings
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_PROXY_LISTEN_SSL: 0.0.0.0:8443
+
+      # Admin API
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_ADMIN_GUI_LISTEN: 0.0.0.0:8002
+
+      # Logging
+      KONG_LOG_LEVEL: info
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+
+      # Performance
+      KONG_NGINX_WORKER_PROCESSES: auto
+      KONG_NGINX_HTTP_KEEPALIVE_REQUESTS: 100
+      KONG_UPSTREAM_KEEPALIVE_POOL_SIZE: 60
+
+      # Plugins
+      KONG_PLUGINS: bundled
+
+      # Misc
+      KONG_TRUSTED_IPS: 0.0.0.0/0,::/0
+      KONG_REAL_IP_HEADER: X-Forwarded-For
+      KONG_REAL_IP_RECURSIVE: "on"
+    volumes:
+      - ./kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
+    ports:
+      - "8000:8000"  # Proxy HTTP (internal - accessed via NGINX)
+      - "8001:8001"  # Admin API
+      - "8002:8002"  # Admin GUI
+      - "8443:8443"  # Proxy HTTPS
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - gateway-network
+    restart: unless-stopped
+
+  # ============================================
+  # NGINX (External Entrypoint)
+  # ============================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: api-gateway-nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx-logs:/var/log/nginx
+      - static-files:/var/www/static:ro
+      - media-files:/var/www/media:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      kong:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - gateway-network
+      - backend-network
+    restart: unless-stopped
+
+  # ============================================
+  # Prometheus (Metrics Collection)
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: api-gateway-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - gateway-network
+    restart: unless-stopped
+
+  # ============================================
+  # Grafana (Metrics Visualization)
+  # ============================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: api-gateway-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - gateway-network
+    restart: unless-stopped
+
+volumes:
+  nginx-logs:
+  static-files:
+  media-files:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  # Internal network for gateway components
+  gateway-network:
+    driver: bridge
+
+  # Network to connect to backend services
+  backend-network:
+    external: true
+    name: cinema-backend

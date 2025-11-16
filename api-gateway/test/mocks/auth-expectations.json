@@ -1,0 +1,68 @@
+[
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/api/v1/auth/register"
+    },
+    "httpResponse": {
+      "statusCode": 201,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "user_id": "123e4567-e89b-12d3-a456-426614174000",
+        "email": "test@example.com",
+        "message": "User registered successfully"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/api/v1/auth/login"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJjaW5lbWEtaXNzdWVyIiwic3ViIjoidXNlci0xMjMiLCJleHAiOjE3MzU2ODk2MDAsImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSJ9.mock-signature",
+        "refresh_token": "refresh_token_here",
+        "token_type": "Bearer",
+        "expires_in": 3600
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/api/v1/auth/logout"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "message": "Logged out successfully"
+      }
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/api/v1/auth/health"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "status": "healthy",
+        "service": "auth-service"
+      }
+    }
+  }
+]
